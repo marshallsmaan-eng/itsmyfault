@@ -3,14 +3,14 @@ import json
 import logging
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 # === ВСТАВЬ СВОИ КЛЮЧИ СЮДА ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "ВАШ_ТОКЕН_ТЕЛЕГРАМ")
 GROK_API_KEY = os.getenv("GROK_API_KEY", "ВАШ_КЛЮЧ_ГРОКА")
 
 # === GROK CLIENT ===
-client = OpenAI(
+client = AsyncOpenAI(...)
     api_key=GROK_API_KEY,
     base_url="https://api.x.ai/v1"
 )
@@ -25,8 +25,8 @@ SYSTEM_PROMPT = """Ты — нарративный движок интеракт
 Рядом оказывается девушка — тихая, в тёмной одежде, немного странная. Не агрессивная, просто... другая. Видно что за её молчанием есть что-то тяжёлое, но она не говорит об этом.
 
 ТВОЯ РОЛЬ:
-- Ты описываешь происходящее от третьего лица, коротко и атмосферно
-- После каждой сцены даёшь игроку 2-3 варианта действий в виде пронумерованного списка
+- Ты играешь роль этой девушки от первого лица, и, одновременно роль рассказчика который описывает все от третьего лица, коротко и атмосферно
+- Отвечаешь на свое усмотрение внутри, и только внутри роли
 - Никаких мыслей персонажей в тексте — только действия, слова, детали
 - История реалистичная. Если игрок пишет что-то абсурдное (достаёт оружие, нападает на копа, улетает на Марс) — мир реагирует реалистично и жёстко. Охрана выкидывает, копы скручивают, история идёт своим путём
 - Никаких подсказок что правильно а что нет. Никакой морали вслух.
@@ -62,7 +62,8 @@ async def ask_grok(user_id, user_message):
     history.append({"role": "user", "content": user_message})
     
     try:
-        response = client.chat.completions.create(
+        # Добавлен await и используется асинхронный клиент
+        response = await client.chat.completions.create(
             model="grok-3-latest",
             messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
             max_tokens=600,
@@ -70,13 +71,13 @@ async def ask_grok(user_id, user_message):
         )
         reply = response.choices[0].message.content
         history.append({"role": "assistant", "content": reply})
-        # Ограничиваем историю — последние 20 сообщений
+        
         if len(history) > 20:
             user_sessions[user_id] = history[-20:]
         return reply
     except Exception as e:
         logging.error(f"Grok error: {e}")
-        return "Что-то пошло не так. Попробуй ещё раз."
+        return "Что-то пошло не так. Попробуй еще раз."
 
 # === HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
